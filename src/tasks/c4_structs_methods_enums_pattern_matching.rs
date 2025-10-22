@@ -65,7 +65,6 @@ impl Company {
         Self { name, date_of_origin, annual_income }
     }
 
-    // Без аргументов, т.к. тест вызывает total_income() без параметров
     pub fn total_income(&self) -> u64 {
         let years = 2025 - self.date_of_origin;
         years as u64 * self.annual_income
@@ -125,7 +124,6 @@ pub enum TrafficLight {
 }
 
 impl TrafficLight {
-    // Метод, а не статическая функция
     pub fn next(&self) -> TrafficLight {
         match self {
             TrafficLight::Red => TrafficLight::Green,

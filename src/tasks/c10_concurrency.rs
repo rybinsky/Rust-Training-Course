@@ -11,7 +11,13 @@ use std::thread;
 // Spawn multiple threads to calculate squares of the provided numbers and collect the results.
 
 pub fn calculate_squares(input_numbers: Vec<i32>) -> Vec<i32> {
-    unimplemented!()
+    let mut handles = Vec::new();
+
+    for n in input_numbers {
+        handles.push(thread::spawn(move || n * n));
+    }
+
+    handles.into_iter().map(|h| h.join().unwrap()).collect()
 }
 
 // ----- 2 --------------------------------------
@@ -38,7 +44,21 @@ fn is_prime(number: u64) -> bool {
 /// - `Vec<(u64, bool)>` is a vector of the provided values along with the boolean flag whether this
 ///   value is prime.
 pub fn parallel_prime_check(numbers: Vec<u64>, number_of_threads: usize) -> Vec<(u64, bool)> {
-    unimplemented!()
+    let chunk_size = (numbers.len() + number_of_threads - 1) / number_of_threads;
+    let mut handles = Vec::new();
+
+    for chunk in numbers.chunks(chunk_size) {
+        let chunk = chunk.to_vec();
+        handles.push(thread::spawn(move || {
+            chunk.into_iter().map(|n| (n, is_prime(n))).collect::<Vec<_>>()
+        }));
+    }
+
+    let mut result = Vec::new();
+    for h in handles {
+        result.extend(h.join().unwrap());
+    }
+    result
 }
 
 // MPSC CHANNELS
@@ -56,7 +76,18 @@ fn factorial(n: u32) -> u32 {
 }
 
 pub fn parallel_factorials(numbers: Vec<u32>) -> Vec<u32> {
-    unimplemented!()
+    let (tx, rx) = mpsc::channel();
+
+    for n in numbers {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            tx.send(factorial(n)).unwrap();
+        });
+    }
+
+    drop(tx);
+
+    rx.into_iter().collect()
 }
 
 // MUTEX + ARC
@@ -73,20 +104,23 @@ pub fn parallel_factorials(numbers: Vec<u32>) -> Vec<u32> {
 
 #[derive(Clone)]
 pub struct SharedCounter {
-    value: i32,
+    value: Arc<Mutex<i32>>,
 }
 
 impl SharedCounter {
     pub fn new(initial_value: i32) -> Self {
-        unimplemented!()
+        Self {
+            value: Arc::new(Mutex::new(initial_value)),
+        }
     }
 
     pub fn increment(&self) {
-        unimplemented!()
+        let mut v = self.value.lock().unwrap();
+        *v += 1;
     }
 
     pub fn get_value(&self) -> i32 {
-        unimplemented!()
+        *self.value.lock().unwrap()
     }
 }
 
@@ -106,24 +140,33 @@ impl SharedCounter {
 
 #[derive(Clone)]
 pub struct BankAccount {
-    balance: i32,
+    balance: Arc<Mutex<i32>>,
 }
 
 impl BankAccount {
     pub fn new(initial_balance: i32) -> Self {
-        unimplemented!()
+        Self {
+            balance: Arc::new(Mutex::new(initial_balance)),
+        }
     }
 
     pub fn deposit(&self, amount: i32) {
-        unimplemented!()
+        let mut b = self.balance.lock().unwrap();
+        *b += amount;
     }
 
     pub fn withdraw(&self, amount: i32) -> bool {
-        unimplemented!()
+        let mut b = self.balance.lock().unwrap();
+        if *b >= amount {
+            *b -= amount;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn get_balance(&self) -> i32 {
-        unimplemented!()
+        *self.balance.lock().unwrap()
     }
 }
 
@@ -156,10 +199,47 @@ impl BankAccount {
 //   - Send each task from the input list into the task_sender.
 //   - Collect all results from the result_receiver into a vector and return it.
 
-fn worker(worker_id: usize, task_receiver: Receiver<i32>, result_sender: Sender<(usize, i32)>) {
-    unimplemented!()
+fn worker(
+    worker_id: usize,
+    task_receiver: Arc<Mutex<Receiver<i32>>>,
+    result_sender: Sender<(usize, i32)>,
+) {
+    loop {
+        let task = {
+            let rx = task_receiver.lock().unwrap();
+            rx.recv()
+        };
+
+        match task {
+            Ok(task) => {
+                let result = task * task;
+                result_sender.send((worker_id, result)).unwrap();
+            },
+            Err(_) => break,
+        }
+    }
 }
 
 pub fn run_work_queue(tasks: Vec<i32>, number_of_workers: usize) -> Vec<(usize, i32)> {
-    unimplemented!()
+    let (task_tx, task_rx) = mpsc::channel();
+    let (result_tx, result_rx) = mpsc::channel();
+
+    let task_rx = Arc::new(Mutex::new(task_rx));
+
+    for id in 0..number_of_workers {
+        let rx = Arc::clone(&task_rx);
+        let tx = result_tx.clone();
+        thread::spawn(move || {
+            worker(id, rx, tx);
+        });
+    }
+
+    for task in tasks {
+        task_tx.send(task).unwrap();
+    }
+
+    drop(task_tx);
+    drop(result_tx);
+
+    result_rx.into_iter().collect()
 }

@@ -20,8 +20,47 @@ use std::rc::Rc;
 //
 // Use `Box` if needed
 
-// IMPLEMENT HERE:
+#[derive(Debug)]
+pub struct BinaryTreeNode {
+    value: i32,
+    left_child: Option<Box<BinaryTreeNode>>,
+    right_child: Option<Box<BinaryTreeNode>>,
+}
 
+impl BinaryTreeNode {
+    pub fn new(value: i32) -> Self {
+        Self {
+            value,
+            left_child: None,
+            right_child: None,
+        }
+    }
+
+    pub fn with_children(
+        value: i32,
+        left_child: BinaryTreeNode,
+        right_child: BinaryTreeNode,
+    ) -> Self {
+        Self {
+            value,
+            left_child: Some(Box::new(left_child)),
+            right_child: Some(Box::new(right_child)),
+        }
+    }
+
+    pub fn sum(&self) -> i32 {
+        let mut result = self.value;
+
+        if let Some(ref left) = self.left_child {
+            result += left.sum();
+        }
+        if let Some(ref right) = self.right_child {
+            result += right.sum();
+        }
+
+        result
+    }
+}
 // Rc
 // ================================================================================================
 
@@ -43,9 +82,50 @@ use std::rc::Rc;
 
 // IMPLEMENT HERE:
 
+#[derive(Debug)]
+pub struct Package {
+    name: String,
+    dependencies: Vec<Rc<Package>>,
+}
+
+impl Package {
+    pub fn new(name: &str) -> Rc<Self> {
+        Rc::new(Self {
+            name: name.to_string(),
+            dependencies: Vec::new(),
+        })
+    }
+
+    pub fn with_dependencies(name: &str, dependencies: Vec<Rc<Package>>) -> Rc<Self> {
+        Rc::new(Self { name: name.to_string(), dependencies })
+    }
+
+    pub fn list_dependencies(package: Rc<Package>) -> Vec<String> {
+        fn collect(pkg: &Rc<Package>, acc: &mut Vec<String>) {
+            for dep in &pkg.dependencies {
+                acc.push(dep.name.clone());
+                collect(dep, acc);
+            }
+        }
+
+        let mut result = Vec::new();
+        collect(&package, &mut result);
+        result
+    }
+}
+
 #[test]
 fn test_list_dependencies() {
-    // IMPLEMENT HERE:
+    let shared_lib = Package::new("shared-lib");
+    let utils = Package::with_dependencies("utils", vec![Rc::clone(&shared_lib)]);
+    let core = Package::with_dependencies("core", vec![Rc::clone(&shared_lib)]);
+    let app = Package::with_dependencies("app", vec![utils, core]);
+
+    let deps = Package::list_dependencies(app);
+
+    assert!(deps.contains(&"utils".to_string()));
+    assert!(deps.contains(&"core".to_string()));
+    assert_eq!(deps.iter().filter(|d| *d == "shared-lib").count(), 2);
 }
 
 // RefCell
@@ -58,21 +138,20 @@ fn test_list_dependencies() {
 // Implement `new() -> Self` constructor, `increment(&self)` and `get(&self) -> i32` methods.
 // Use `RefCell` where needed.
 
-// IMPLEMENT HERE:
 pub struct SharedCounter {
-    value: i32,
+    value: RefCell<i32>,
 }
 
 impl SharedCounter {
     pub fn new() -> Self {
-        !unimplemented!()
+        Self { value: RefCell::new(0) }
     }
 
     pub fn increment(&self) {
-        !unimplemented!()
+        *self.value.borrow_mut() += 1;
     }
 
     pub fn get(&self) -> i32 {
-        !unimplemented!()
+        *self.value.borrow()
     }
 }
